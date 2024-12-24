@@ -121,6 +121,10 @@ func load_atlas(path: String) -> void:
 			_collections.push_back(sprite_collection)
 	
 	var animation_string := FileAccess.get_file_as_string('%s/Animation.json' % [atlas_directory])
+	if animation_string.is_empty():
+		frame = 0
+		return
+	
 	var animation_json: Variant = JSON.parse_string(animation_string)
 	if animation_json == null:
 		frame = 0
