@@ -70,6 +70,10 @@ func _process(delta: float) -> void:
 func load_atlas(path: String) -> void:
 	_collections.clear()
 	_animation = null
+
+	if path.is_empty():
+		frame = 0
+		return
 	
 	var atlas_directory := path
 	if not atlas_directory.get_extension().is_empty():
@@ -82,6 +86,7 @@ func load_atlas(path: String) -> void:
 			var spritemap_json: Variant = JSON.parse_string(spritemap_string)
 			if spritemap_json == null:
 				printerr('Failed to parse %s' % file)
+				frame = 0
 				return
 			var sprite_collection := SpriteCollection.load_from_json(
 				spritemap_json,
@@ -94,6 +99,7 @@ func load_atlas(path: String) -> void:
 	if animation_json == null:
 		print('%s/Animation.json' % [atlas_directory])
 		printerr('Failed to parse Animation.json')
+		frame = 0
 		return
 	_animation = AtlasAnimation.load_from_json(animation_json)
 	frame = 0
