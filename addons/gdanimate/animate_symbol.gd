@@ -53,11 +53,11 @@ var _current_transform: Transform2D = Transform2D.IDENTITY
 
 
 func _process(delta: float) -> void:
-	if not playing:
-		return
-	
 	if not is_instance_valid(_animation):
 		frame = 0
+		return
+	
+	if not playing:
 		return
 	
 	_timer += delta
