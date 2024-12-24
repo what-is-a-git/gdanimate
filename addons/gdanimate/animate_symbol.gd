@@ -13,6 +13,7 @@ class_name AnimateSymbol extends Node2D
 		atlas = v
 		load_atlas(atlas)
 
+
 ## The current frame of the animation.
 ## [br][br][b]Note[/b]: This automatically redraws the entire
 ## atlas when changed.
@@ -37,6 +38,8 @@ class_name AnimateSymbol extends Node2D
 ## [br][br]Loop loops the animation forever and Play Once just stops.
 @export_enum('Loop', 'Play Once') var loop_mode: String = 'Loop'
 
+@export_tool_button('Cache Atlas', 'Save') var cache_atlas := _cache_atlas
+
 var _timeline:
 	get:
 		if not is_instance_valid(_animation):
@@ -53,6 +56,10 @@ func _process(delta: float) -> void:
 	if not playing:
 		return
 	
+	if not is_instance_valid(_animation):
+		frame = 0
+		return
+	
 	_timer += delta
 	if _timer >= 1.0 / _animation.framerate:
 		var frame_diff := _timer / (1.0 / _animation.framerate)
@@ -66,18 +73,37 @@ func _process(delta: float) -> void:
 					frame = _timeline.length - 1
 
 
+func _cache_atlas() -> void:
+	var parsed := ParsedAtlas.new()
+	parsed.collections = _collections
+	parsed.animation = _animation
+	
+	var atlas_directory := atlas
+	if not atlas_directory.get_extension().is_empty():
+		atlas_directory = atlas_directory.get_base_dir()
+	
+	var err := ResourceSaver.save(parsed, \
+			'%s/Animation.res' % [atlas_directory], ResourceSaver.FLAG_COMPRESS)
+	if err != OK:
+		printerr(err)
+
+
 ## Loads a new atlas from the specified [param path].
 func load_atlas(path: String) -> void:
 	_collections.clear()
 	_animation = null
-
-	if path.is_empty():
-		frame = 0
-		return
 	
 	var atlas_directory := path
 	if not atlas_directory.get_extension().is_empty():
 		atlas_directory = atlas_directory.get_base_dir()
+	
+	var parsed_path := '%s/Animation.res' % atlas_directory
+	if ResourceLoader.exists(parsed_path):
+		var parsed: ParsedAtlas = load(parsed_path)
+		_animation = parsed.animation
+		_collections = parsed.collections
+		frame = 0
+		return
 	
 	var files := ResourceLoader.list_directory(atlas_directory)
 	for file in files:
@@ -97,8 +123,6 @@ func load_atlas(path: String) -> void:
 	var animation_string := FileAccess.get_file_as_string('%s/Animation.json' % [atlas_directory])
 	var animation_json: Variant = JSON.parse_string(animation_string)
 	if animation_json == null:
-		print('%s/Animation.json' % [atlas_directory])
-		printerr('Failed to parse Animation.json')
 		frame = 0
 		return
 	_animation = AtlasAnimation.load_from_json(animation_json)
@@ -116,9 +140,10 @@ func _draw_symbol(element: Element) -> void:
 func _draw_sprite(element: Element) -> void:
 	draw_set_transform_matrix(_current_transform)
 	for collection in _collections:
+		#print(collection.map)
 		if not collection.map.has(element.name):
 			continue
-		var sprite: SpriteCollection.CollectedSprite = collection.map.get(element.name)
+		var sprite: CollectedSprite = collection.map.get(element.name)
 		if is_instance_valid(sprite.custom_texture):
 			draw_texture_rect(
 				sprite.custom_texture,
