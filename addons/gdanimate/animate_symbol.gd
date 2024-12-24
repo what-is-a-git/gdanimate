@@ -28,6 +28,7 @@ class_name AnimateSymbol extends Node2D
 @export var symbol: String = '':
 	set(v):
 		symbol = v
+		symbol_changed.emit(v)
 		frame = 0
 		_timer = 0.0
 
@@ -51,6 +52,9 @@ var _animation: AtlasAnimation
 var _timer: float = 0.0
 var _current_transform: Transform2D = Transform2D.IDENTITY
 
+signal finished
+signal symbol_changed(symbol: String)
+
 
 func _process(delta: float) -> void:
 	if not is_instance_valid(_animation):
@@ -70,6 +74,9 @@ func _process(delta: float) -> void:
 				'Loop':
 					frame = 0
 				_:
+					if playing:
+						playing = false
+						finished.emit()
 					frame = _timeline.length - 1
 
 
