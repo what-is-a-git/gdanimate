@@ -18,6 +18,7 @@ enum SymbolLoopMode {
 @export var symbol_type: SymbolType
 @export var frame: int
 @export var loop_mode: SymbolLoopMode
+@export var filters: Array[Filter]
 
 
 func _init() -> void:
@@ -29,6 +30,18 @@ func parse_unoptimized(input: Dictionary) -> void:
 	name = StringName(symbol.get('SYMBOL_name', ''))
 	instance_name = StringName(symbol.get('Instance_Name', ''))
 	frame = int(symbol.get('firstFrame', 0))
+	filters = []
+	
+	var raw_filters: Dictionary = symbol.get('filters', {})
+	if not raw_filters.is_empty():
+		var blur: Dictionary = raw_filters.get('BlurFilter', {})
+		if not blur.is_empty():
+			var filter := BlurFilter.new()
+			filter.x = blur.get('blurX', 0.0)
+			filter.y = blur.get('blurY', 0.0)
+			filter.quality = blur.get('quality', 0.0)
+			filter.type = Filter.FilterType.BLUR
+			filters.push_back(filter)
 	
 	var raw_symbol_type: String = symbol.get('symbolType', '')
 	match raw_symbol_type:
@@ -50,6 +63,18 @@ func parse_optimized(input: Dictionary) -> void:
 	name = StringName(symbol.get('SN', ''))
 	instance_name = StringName(symbol.get('IN', ''))
 	frame = int(symbol.get('FF', 0))
+	filters = []
+	
+	var raw_filters: Dictionary = symbol.get('F', {})
+	if not raw_filters.is_empty():
+		var blur: Dictionary = raw_filters.get('BLF', {})
+		if not blur.is_empty():
+			var filter := BlurFilter.new()
+			filter.x = blur.get('BLX', 0.0)
+			filter.y = blur.get('BLY', 0.0)
+			filter.quality = blur.get('Q', 0.0)
+			filter.type = Filter.FilterType.BLUR
+			filters.push_back(filter)
 	
 	var raw_symbol_type: String = symbol.get('ST', '')
 	match raw_symbol_type:

@@ -40,6 +40,7 @@ class_name AnimateSymbol extends Node2D
 @export_enum('Loop', 'Play Once') var loop_mode: String = 'Loop'
 
 @export_tool_button('Cache Atlas', 'Save') var cache_atlas := _cache_atlas
+@export_tool_button('Reload Atlas', 'Reload') var reload_atlas := _reload_atlas
 
 var _timeline:
 	get:
@@ -51,6 +52,8 @@ var _collections: Array[SpriteCollection]
 var _animation: AtlasAnimation
 var _timer: float = 0.0
 var _current_transform: Transform2D = Transform2D.IDENTITY
+var _canvas_items: Array[RID] = []
+var _filters: Array[Filter] = []
 
 signal finished
 signal symbol_changed(symbol: String)
@@ -58,7 +61,8 @@ signal symbol_changed(symbol: String)
 
 func _process(delta: float) -> void:
 	if not is_instance_valid(_animation):
-		frame = 0
+		if frame > 0:
+			frame = 0
 		return
 	
 	if not playing:
@@ -95,8 +99,15 @@ func _cache_atlas() -> void:
 		printerr(err)
 
 
+func _reload_atlas() -> void:
+	var atlas_directory := atlas
+	if not atlas_directory.get_extension().is_empty():
+		atlas_directory = atlas_directory.get_base_dir()
+	load_atlas(atlas_directory, false)
+
+
 ## Loads a new atlas from the specified [param path].
-func load_atlas(path: String) -> void:
+func load_atlas(path: String, use_cache: bool = true) -> void:
 	_collections.clear()
 	_animation = null
 	
@@ -105,10 +116,11 @@ func load_atlas(path: String) -> void:
 		atlas_directory = atlas_directory.get_base_dir()
 	
 	var parsed_path := '%s/Animation.res' % atlas_directory
-	if ResourceLoader.exists(parsed_path):
+	if ResourceLoader.exists(parsed_path) and use_cache:
 		var parsed: ParsedAtlas = load(parsed_path)
 		_animation = parsed.animation
 		_collections = parsed.collections
+		_clear_items()
 		frame = 0
 		return
 	
@@ -142,42 +154,79 @@ func _draw_symbol(element: Element) -> void:
 		printerr('Tried to draw invalid symbol "%s"' % [element.name])
 		return
 	
+	_filters = element.filters
 	_draw_timeline(_animation.symbol_dictionary.get(element.name), element.frame)
 
 
 func _draw_sprite(element: Element) -> void:
-	draw_set_transform_matrix(_current_transform)
 	for collection in _collections:
-		#print(collection.map)
 		if not collection.map.has(element.name):
 			continue
+		var use_item: bool = true
 		var sprite: CollectedSprite = collection.map.get(element.name)
-		if is_instance_valid(sprite.custom_texture):
-			draw_texture_rect(
-				sprite.custom_texture,
-				Rect2(
-					Vector2.ZERO,
-					Vector2(sprite.rect.size.y, sprite.rect.size.x) \
-							* (Vector2.ONE / collection.scale)
-				),
-				false
-			)
+		var item: RID
+		if use_item:
+			item = RenderingServer.canvas_item_create()
+			_canvas_items.push_back(item)
+			RenderingServer.canvas_item_set_z_index(item, 
+					mini(_canvas_items.size() - 1, RenderingServer.CANVAS_ITEM_Z_MAX))
+			RenderingServer.canvas_item_set_parent(item, get_canvas_item())
+			RenderingServer.canvas_item_set_transform(item, _current_transform)
+			
+			#if not _filters.is_empty():
+				#var filter_material: ShaderMaterial = _filter_material.duplicate()
+				#RenderingServer.canvas_item_set_material(item, filter_material.get_rid())
+				#
+				#for filter in _filters:
+					#match filter.type:
+						#Filter.FilterType.BLUR:
+							#filter_material.set_shader_parameter('test', 4.0)
 		else:
-			draw_texture_rect_region(
-				collection.texture,
-				Rect2(Vector2.ZERO, Vector2(sprite.rect.size) * (Vector2.ONE / collection.scale)),
-				Rect2(sprite.rect)
-			)
+			draw_set_transform_matrix(_current_transform)
+		
+		if is_instance_valid(sprite.custom_texture):
+			if use_item:
+				RenderingServer.canvas_item_add_texture_rect(
+					item,
+					Rect2(
+						Vector2.ZERO,
+						Vector2(sprite.rect.size.y, sprite.rect.size.x) \
+								* (Vector2.ONE / collection.scale)
+					),
+					sprite.custom_texture
+				)
+			else:
+				draw_texture_rect(
+					sprite.custom_texture,
+					Rect2(
+						Vector2.ZERO,
+						Vector2(sprite.rect.size.y, sprite.rect.size.x) \
+								* (Vector2.ONE / collection.scale)
+					),
+					false
+				)
+		else:
+			if use_item:
+				RenderingServer.canvas_item_add_texture_rect_region(
+					item,
+					Rect2(Vector2.ZERO, Vector2(sprite.rect.size) * (Vector2.ONE / collection.scale)),
+					collection.texture,
+					Rect2(sprite.rect)
+				)
+			else:
+				draw_texture_rect_region(
+					collection.texture,
+					Rect2(Vector2.ZERO, Vector2(sprite.rect.size) * (Vector2.ONE / collection.scale)),
+					Rect2(sprite.rect),
+				)
 		return
 	printerr('Tried to draw invalid sprite "%s"' % [element.name])
 
 
 func _draw_timeline(timeline: Timeline, target_frame: int) -> void:
-	var layers := timeline.layers.duplicate()
-	layers.reverse()
-	
 	var layer_transform := _current_transform
-	for layer: Layer in layers:
+	for i in timeline.layers.size():
+		var layer: Layer = timeline.layers[timeline.layers.size() - (i + 1)]
 		for layer_frame in layer.frames:
 			if target_frame < layer_frame.index:
 				continue
@@ -193,9 +242,21 @@ func _draw_timeline(timeline: Timeline, target_frame: int) -> void:
 						_draw_sprite(element)
 
 
+func _clear_items() -> void:
+	RenderingServer.canvas_item_clear(get_canvas_item())
+	while not _canvas_items.is_empty():
+		var item: RID = _canvas_items.pop_back()
+		RenderingServer.free_rid(item)
+
+
+func _exit_tree() -> void:
+	_clear_items()
+
+
 func _draw() -> void:
+	_clear_items()
+	
 	if not is_instance_valid(_timeline):
 		return
-	
 	_current_transform = Transform2D.IDENTITY
 	_draw_timeline(_timeline, frame)
